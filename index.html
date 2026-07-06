@@ -343,7 +343,7 @@ function vWorkout(){
         <button class="btn sm" data-act="add-set" data-ei="${ei}">＋ 세트</button>
         <button class="btn sm ghost muted" data-act="del-set" data-ei="${ei}">－ 세트</button>
         <span class="grow"></span>
-        <span class="tiny muted num">휴식 ${ex?ex.restSec:60}초</span>
+        <button class="chip num" style="padding:5px 12px" data-act="edit-rest" data-id="${en.exId}">⏱ 휴식 ${ex?ex.restSec:60}초</button>
       </div>
     </div>`}).join(''):`<div class="empty">아래 버튼으로 운동을 추가하세요.</div>`}
   <button class="btn" data-act="add-ex">＋ 운동 추가</button>
@@ -354,6 +354,9 @@ function setDone(ei,si){
   if(s.done){ s.done=false; save(); render(); return; }
   const prev=prevEntry(en.exId,a.ts); const ph=prev&&prev.en.sets[si]?prev.en.sets[si]:null;
   if(s.w===''&&ph) s.w=ph.w; if(s.r===''&&ph) s.r=ph.r;
+  const before=en.sets[si-1];
+  if(s.w===''&&before&&before.w!=='') s.w=before.w;
+  if(s.r===''&&before&&before.r!=='') s.r=before.r;
   if(s.r===''&&en.targetReps){const m=String(en.targetReps).match(/\d+/);if(m)s.r=m[0]}
   s.done=true;
   const ex=getEx(en.exId);
@@ -708,7 +711,18 @@ document.addEventListener('click',e=>{
       if(ui.view.name==='workout'&&a){a.entries.push({exId:ex.id,targetReps:'',sets:[{w:'',r:'',done:false},{w:'',r:'',done:false},{w:'',r:'',done:false}]});save()}
       render(); break;}
     case 'set-done': setDone(+el.dataset.ei,+el.dataset.si); break;
-    case 'add-set': a.entries[+el.dataset.ei].sets.push({w:'',r:'',done:false}); save(); render(); break;
+    case 'add-set':{
+      const ss=a.entries[+el.dataset.ei].sets;
+      let src=null;
+      for(let i=ss.length-1;i>=0;i--){if(ss[i].w!==''||ss[i].r!==''){src=ss[i];break}}
+      ss.push({w:src?src.w:'',r:src?src.r:'',done:false}); save(); render(); break;}
+    case 'edit-rest':{
+      const ex=getEx(id); if(!ex)break;
+      const v=prompt(`${ex.name} 휴식 시간(초)`,ex.restSec);
+      if(v===null)break;
+      const n=parseInt(v,10);
+      if(isNaN(n)||n<0){alert('숫자를 입력하세요');break}
+      ex.restSec=n; save(); render(); break;}
     case 'del-set':{const ss=a.entries[+el.dataset.ei].sets; if(ss.length>1)ss.pop(); save(); render(); break;}
     case 'del-ex': if(confirm('이 운동을 목록에서 뺄까요?')){a.entries.splice(+el.dataset.ei,1);save();render()} break;
     case 'finish': finishWorkout(); break;
