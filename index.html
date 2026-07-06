@@ -143,6 +143,16 @@ tr:last-child td{border-bottom:none}
 .chart{margin-top:8px;overflow-x:auto}
 svg text{font-family:inherit}
 
+/* game */
+.avwrap{width:100px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.xpbar{height:6px;background:var(--line);border-radius:3px;overflow:hidden;margin-top:5px}
+.xpbar i{display:block;height:100%;background:var(--ac)}
+.hpbar{height:8px;background:var(--line);border-radius:4px;overflow:hidden;flex:1}
+.hpbar i{display:block;height:100%;background:var(--bad);border-radius:4px}
+.pillrow{display:flex;flex-wrap:wrap;gap:6px}
+.setrow.wu .idx{color:var(--ac)}
+.setrow.wu input{opacity:.8}
+
 .empty{color:var(--dim);text-align:center;padding:36px 0 28px;font-size:14px}
 .note{background:var(--ac-soft);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--tx)}
 ul.plain{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
@@ -227,11 +237,17 @@ if(DB.active) ui.view={name:'workout'};
 function load(){
   try{
     const d=JSON.parse(localStorage.getItem(KEY));
-    if(d&&d.exercises) return d;
+    if(d&&d.exercises){
+      d.settings=d.settings||{sound:true,vib:true};
+      if(!d.settings.weekGoal)d.settings.weekGoal=3;
+      d.routines=d.routines||[];
+      if(!d.game)d.game={xp:(d.workouts||[]).length*20};
+      return d;
+    }
   }catch(e){}
   return {
     exercises:SEED.map(s=>({id:s[0],name:s[1],muscle:s[2],restSec:s[3]})),
-    workouts:[],routines:[],settings:{sound:true,vib:true},active:null
+    workouts:[],routines:[],settings:{sound:true,vib:true,weekGoal:3},active:null,game:{xp:0}
   };
 }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){} }
@@ -249,12 +265,125 @@ function fmtDateShort(ts){const d=new Date(ts);return `${d.getMonth()+1}/${d.get
 function fmtDur(sec){sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;return m>=60?`${Math.floor(m/60)}시간 ${m%60}분`:`${m}분 ${s}초`}
 function clock(sec){sec=Math.max(0,Math.round(sec));return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`}
 function sorted(){return [...DB.workouts].sort((a,b)=>b.ts-a.ts)}
-function entryVolume(en){return en.sets.reduce((s,x)=>s+(+x.w||0)*(+x.r||0),0)}
-function entryBestE1(en){return Math.max(0,...en.sets.map(s=>e1rm(s.w,s.r)))}
+function entryVolume(en){return en.sets.reduce((s,x)=>s+(x.wu?0:(+x.w||0)*(+x.r||0)),0)}
+function entryBestE1(en){return Math.max(0,...en.sets.filter(s=>!s.wu).map(s=>e1rm(s.w,s.r)))}
 function prevEntry(exId,beforeTs){
   for(const w of sorted()){ if(beforeTs&&w.ts>=beforeTs) continue;
     const en=w.entries.find(e=>e.exId===exId); if(en&&en.sets.length) return {w,en}; }
   return null;
+}
+
+/* ---------- game ---------- */
+const BIG3=['squat','bench','deadlift'];
+const COMPOUND=new Set(['bench','incline_bench','db_bench','deadlift','barbell_row','squat','legpress','rdl','hipthrust','ohp','db_shoulder']);
+const MS=[40,60,80,100,120,140,160,180,200,225,250,300];
+const TIERS=[[500,'챌린저','#ff5c8a'],[450,'마스터','#c084fc'],[400,'다이아','#60d9fa'],[350,'플래티넘','#5eead4'],[300,'골드','#fbbf24'],[250,'실버','#cbd5e1'],[200,'브론즈','#d0885c']];
+function tierOf(t){for(const x of TIERS)if(t>=x[0])return{name:x[1],color:x[2]};return{name:'아이언',color:'#8b95a5'}}
+function big3e1(){const o={};BIG3.forEach(id=>{let b=0;DB.workouts.forEach(w=>w.entries.forEach(en=>{if(en.exId===id)b=Math.max(b,entryBestE1(en))}));o[id]=b});return o}
+function bossInfo(){
+  const b3=big3e1(); let best=null;
+  BIG3.forEach(id=>{const cur=b3[id]; if(!cur)return;
+    const next=MS.find(m=>m>cur); if(!next)return;
+    const prevM=[...MS].reverse().find(m=>m<=cur)||0;
+    const p=(cur-prevM)/(next-prevM);
+    if(!best||p>best.p)best={id,cur,next,p};
+  });
+  return best;
+}
+function monday(){const n=new Date();const d=(n.getDay()+6)%7;return new Date(n.getFullYear(),n.getMonth(),n.getDate()-d).getTime()}
+function weekStreak(){
+  const goal=DB.settings.weekGoal||3, W=6048e5;
+  const cnt=ts=>DB.workouts.filter(w=>w.ts>=ts&&w.ts<ts+W).length;
+  let n=0,start=monday();
+  if(cnt(start)>=goal)n=1;
+  start-=W;
+  while(cnt(start)>=goal){n++;start-=W}
+  return n;
+}
+function fatigued(){
+  const d0=new Date(); d0.setHours(0,0,0,0);
+  let n=0;
+  for(let i=0;i<8;i++){const s=d0.getTime()-i*864e5;
+    if(DB.workouts.some(w=>w.ts>=s&&w.ts<s+864e5))n++;else break}
+  return n>=7;
+}
+function devLevels(){
+  const cut=Date.now()-28*864e5; const acc={};
+  DB.workouts.filter(w=>w.ts>=cut).forEach(w=>w.entries.forEach(en=>{
+    const ex=getEx(en.exId); if(!ex)return;
+    acc[ex.muscle]=(acc[ex.muscle]||0)+en.sets.filter(s=>!s.wu).length;
+  }));
+  const lvl=m=>{const s=(acc[m]||0)/4; return s>=12?3:s>=8?2:s>=4?1:0};
+  return {chest:lvl('가슴'),back:lvl('등'),legs:lvl('하체'),sho:lvl('어깨'),arms:Math.max(lvl('이두'),lvl('삼두')),core:lvl('코어')};
+}
+function avatarSVG(){
+  const d=devLevels(), tired=fatigued();
+  const tor=Math.max(d.chest,d.back);
+  const th=2+(tor>=2?1:0)+(tor>=3?1:0);
+  const aw=1+(d.arms>=2?1:0);
+  const lw=1+(d.legs>=2?1:0);
+  const sh=d.sho>=2?1:0;
+  const S='#e8b88a',H='#2e2723',T='#3d4c63',PT='#242b36',SH='#15181e';
+  const r=[]; const put=(x,y,w,h,c)=>r.push(`<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${c}"/>`);
+  put(6,0,5,1,H);
+  put(6,1,5,3,S);
+  put(7,2,1,1,'#20242c'); put(9,2,1,1,'#20242c');
+  if(tired)put(8,3,1,1,'#b3552f');
+  put(8-th-sh,4,(th+sh)*2+1,1,T);
+  put(8-th,5,th*2+1,4,T);
+  if(d.core>=2)put(8-th,8,th*2+1,1,'#2f3a4c');
+  put(8-th-aw,5,aw,1,T); put(8+th+1,5,aw,1,T);
+  put(8-th-aw,6,aw,3,S); put(8+th+1,6,aw,3,S);
+  put(8-lw,9,lw,4,PT); put(9,9,lw,4,PT);
+  put(8-lw,13,lw,1,SH); put(9,13,lw,1,SH);
+  return `<svg viewBox="0 0 17 14" width="92" height="76" shape-rendering="crispEdges" aria-hidden="true">${r.join('')}</svg>`;
+}
+function gameCard(){
+  const g=DB.game, lv=Math.floor(g.xp/100)+1, pct=g.xp%100;
+  const b3=big3e1(), tot=Math.round(b3.squat+b3.bench+b3.deadlift);
+  const tier=tierOf(tot);
+  const st=weekStreak(), goal=DB.settings.weekGoal||3, cur=weekStats().count;
+  const tired=fatigued(), boss=bossInfo();
+  return `<div class="card" style="margin-top:14px"><div class="row" style="align-items:flex-start">
+    <div class="avwrap">${avatarSVG()}</div>
+    <div class="grow">
+      <div class="row between"><b>Lv.${lv}</b><span class="tiny muted num">${g.xp} XP</span></div>
+      <div class="xpbar"><i style="width:${pct}%"></i></div>
+      <div class="small num" style="margin-top:8px">3대 e1RM 합 <b>${tot?kg(tot)+'kg':'–'}</b> · <b style="color:${tier.color}">${tier.name}</b></div>
+      <div class="small num">${st>0?`🔥 ${st}주 연속 주 ${goal}회 달성`:`이번 주 ${cur}/${goal}회`}</div>
+      ${tired?`<div class="tiny" style="color:#facc15;margin-top:2px">😮‍💨 7일 연속 운동 중, 회복도 훈련입니다</div>`:''}
+    </div></div>
+  ${boss?`<div class="row" style="margin-top:12px;gap:8px">
+    <span class="tiny" style="flex-shrink:0">⚔️ <b>${esc(exName(boss.id))} ${boss.next}kg</b></span>
+    <div class="hpbar"><i style="width:${Math.round((1-boss.p)*100)}%"></i></div>
+    <span class="tiny muted num" style="flex-shrink:0">HP ${Math.round((1-boss.p)*100)}%</span>
+  </div>`:''}
+  </div>`;
+}
+function weekMuscleChips(){
+  const mon=monday(); const acc={};
+  DB.workouts.filter(w=>w.ts>=mon).forEach(w=>w.entries.forEach(en=>{
+    const ex=getEx(en.exId); if(!ex)return;
+    acc[ex.muscle]=(acc[ex.muscle]||0)+en.sets.filter(s=>!s.wu).length;
+  }));
+  return MUSCLES.filter(m=>m!=='기타').map(m=>{
+    const n=acc[m]||0;
+    return `<span class="chip num" style="${n?'color:var(--tx);border-color:var(--ac)':''}">${m} ${n}</span>`;
+  }).join('');
+}
+function newEntry(exId,nSets,targetReps){
+  const sets=Array.from({length:nSets||3},()=>({w:'',r:'',done:false}));
+  if(COMPOUND.has(exId)){
+    const prev=prevEntry(exId,DB.active?DB.active.ts:null);
+    if(prev){
+      const top=Math.max(0,...prev.en.sets.filter(s=>!s.wu).map(s=>+s.w||0));
+      if(top>=30){
+        const wu=Math.max(20,Math.round(top*0.5/2.5)*2.5);
+        sets.unshift({w:String(wu),r:'10',done:false,wu:true});
+      }
+    }
+  }
+  return {exId,targetReps:targetReps||'',sets};
 }
 
 /* ---------- render root ---------- */
@@ -282,11 +411,14 @@ function vHome(){
   <div class="hd"><h1>FitLog</h1><span class="sub">${fmtDate(Date.now())}</span></div>
   ${DB.active?`<button class="btn primary" data-act="tab" data-tab="home" style="margin-bottom:10px">진행 중인 운동으로 돌아가기</button>`:`
   <button class="btn primary" data-act="start-empty">빈 운동 시작</button>`}
-  <div class="stats" style="margin-top:14px">
+  ${gameCard()}
+  <div class="stats" style="margin-top:10px">
     <div class="stat"><div class="v num">${wk.count}회</div><div class="k">이번 주 운동</div></div>
     <div class="stat"><div class="v num">${kg(wk.vol)}</div><div class="k">이번 주 볼륨(kg)</div></div>
     <div class="stat"><div class="v num">${DB.workouts.length}</div><div class="k">누적 세션</div></div>
   </div>
+  <div class="sec-t">이번 주 부위별 세트</div>
+  <div class="card"><div class="pillrow">${weekMuscleChips()}</div></div>
   <div class="sec-t">내 루틴</div>
   ${DB.routines.length?DB.routines.map(r=>`
     <div class="card"><div class="row between">
@@ -304,8 +436,7 @@ function vHome(){
 function startWorkout(routine){
   DB.active={
     ts:Date.now(), name:routine?routine.name:'운동',
-    entries:(routine?routine.ex:[]).map(x=>({exId:x.exId,targetReps:x.reps||'',
-      sets:Array.from({length:x.sets||3},()=>({w:'',r:'',done:false}))})),
+    entries:(routine?routine.ex:[]).map(x=>newEntry(x.exId,x.sets,x.reps)),
     rest:null
   };
   save(); ui.view={name:'workout'}; render(); reqWakeLock();
@@ -320,30 +451,41 @@ function vWorkout(){
   </div>
   ${a.entries.length?a.entries.map((en,ei)=>{
     const ex=getEx(en.exId); const prev=prevEntry(en.exId,a.ts);
-    const prevTxt=prev?`지난번 (${fmtDateShort(prev.w.ts)}): ${prev.en.sets.map(s=>`${s.w}×${s.r}`).join(', ')}`
+    const prevMain=prev?prev.en.sets.filter(s=>!s.wu):[];
+    const prevTxt=prev?`지난번 (${fmtDateShort(prev.w.ts)}): ${prevMain.map(s=>`${s.w}×${s.r}`).join(', ')}`
       :(en.targetReps?`목표 ${en.targetReps}회`:'첫 기록입니다');
+    let mi=0;
+    const rows=en.sets.map((s,si)=>{
+      const isW=!!s.wu;
+      const ph=!isW&&prevMain[mi]?prevMain[mi]:null;
+      if(!isW)mi++;
+      return `<div class="setrow ${s.done?'done':''}${isW?' wu':''}">
+        <span class="idx num">${isW?'W':mi}</span>
+        <input class="num" inputmode="decimal" data-in="w" data-ei="${ei}" data-si="${si}" value="${esc(s.w)}" placeholder="${ph?ph.w:''}">
+        <input class="num" inputmode="numeric" data-in="r" data-ei="${ei}" data-si="${si}" value="${esc(s.r)}" placeholder="${ph?ph.r:esc(en.targetReps||'')}">
+        <button class="ck" data-act="set-done" data-ei="${ei}" data-si="${si}">✓</button>
+      </div>`}).join('');
     return `<div class="wex">
-      <div class="row between">
+      <div class="row between" style="align-items:flex-start">
         <div class="grow"><div class="exname">${esc(ex?ex.name:'?')}</div>
-        <div class="prev num">${esc(prevTxt)}</div></div>
-        <button class="btn sm ghost danger" data-act="del-ex" data-ei="${ei}">삭제</button>
+        <div class="prev num">${esc(prevTxt)}${prev&&prev.en.note?` · 📝 ${esc(prev.en.note)}`:''}</div>
+        ${en.note?`<div class="prev">📝 ${esc(en.note)}</div>`:''}</div>
+        <span class="row" style="gap:4px;flex-shrink:0">
+          <button class="btn sm ghost muted" data-act="mv-ex" data-ei="${ei}" data-dir="-1">▲</button>
+          <button class="btn sm ghost muted" data-act="mv-ex" data-ei="${ei}" data-dir="1">▼</button>
+          <button class="btn sm ghost danger" data-act="del-ex" data-ei="${ei}">✕</button>
+        </span>
       </div>
       <div class="sets">
         <div class="sethead"><span></span><span>무게(kg)</span><span>회수</span><span></span></div>
-        ${en.sets.map((s,si)=>{
-          const ph=prev&&prev.en.sets[si]?prev.en.sets[si]:null;
-          return `<div class="setrow ${s.done?'done':''}">
-            <span class="idx num">${si+1}</span>
-            <input class="num" inputmode="decimal" data-in="w" data-ei="${ei}" data-si="${si}" value="${esc(s.w)}" placeholder="${ph?ph.w:''}">
-            <input class="num" inputmode="numeric" data-in="r" data-ei="${ei}" data-si="${si}" value="${esc(s.r)}" placeholder="${ph?ph.r:esc(en.targetReps||'')}">
-            <button class="ck" data-act="set-done" data-ei="${ei}" data-si="${si}">✓</button>
-          </div>`}).join('')}
+        ${rows}
       </div>
       <div class="row" style="margin-top:10px">
         <button class="btn sm" data-act="add-set" data-ei="${ei}">＋ 세트</button>
         <button class="btn sm ghost muted" data-act="del-set" data-ei="${ei}">－ 세트</button>
+        <button class="btn sm ghost muted" data-act="ex-note" data-ei="${ei}">메모</button>
         <span class="grow"></span>
-        <button class="chip num" style="padding:5px 12px" data-act="edit-rest" data-id="${en.exId}">⏱ 휴식 ${ex?ex.restSec:60}초</button>
+        <button class="chip num" style="padding:5px 12px" data-act="edit-rest" data-id="${en.exId}">⏱ ${ex?ex.restSec:60}초</button>
       </div>
     </div>`}).join(''):`<div class="empty">아래 버튼으로 운동을 추가하세요.</div>`}
   <button class="btn" data-act="add-ex">＋ 운동 추가</button>
@@ -352,11 +494,17 @@ function vWorkout(){
 function setDone(ei,si){
   const a=DB.active; const en=a.entries[ei]; const s=en.sets[si];
   if(s.done){ s.done=false; save(); render(); return; }
-  const prev=prevEntry(en.exId,a.ts); const ph=prev&&prev.en.sets[si]?prev.en.sets[si]:null;
+  const prev=prevEntry(en.exId,a.ts);
+  const prevMain=prev?prev.en.sets.filter(x=>!x.wu):[];
+  const mi=en.sets.slice(0,si).filter(x=>!x.wu).length;
+  const ph=!s.wu&&prevMain[mi]?prevMain[mi]:null;
   if(s.w===''&&ph) s.w=ph.w; if(s.r===''&&ph) s.r=ph.r;
-  const before=en.sets[si-1];
-  if(s.w===''&&before&&before.w!=='') s.w=before.w;
-  if(s.r===''&&before&&before.r!=='') s.r=before.r;
+  let before=null;
+  for(let i=si-1;i>=0;i--){if(!en.sets[i].wu){before=en.sets[i];break}}
+  if(!s.wu){
+    if(s.w===''&&before&&before.w!=='') s.w=before.w;
+    if(s.r===''&&before&&before.r!=='') s.r=before.r;
+  }
   if(s.r===''&&en.targetReps){const m=String(en.targetReps).match(/\d+/);if(m)s.r=m[0]}
   s.done=true;
   const ex=getEx(en.exId);
@@ -365,13 +513,25 @@ function setDone(ei,si){
 }
 function finishWorkout(){
   const a=DB.active;
-  const entries=a.entries.map(en=>({exId:en.exId,sets:en.sets.filter(s=>s.done&&(+s.w||+s.r))
-    .map(s=>({w:+s.w||0,r:+s.r||0}))})).filter(en=>en.sets.length);
+  const entries=a.entries.map(en=>{
+    const sets=en.sets.filter(s=>s.done&&(+s.w||+s.r)).map(s=>{
+      const o={w:+s.w||0,r:+s.r||0}; if(s.wu)o.wu=1; return o;});
+    const e={exId:en.exId,sets}; if(en.note)e.note=en.note; return e;
+  }).filter(en=>en.sets.length);
   if(!entries.length){ if(confirm('완료된 세트가 없습니다. 기록 없이 종료할까요?')){DB.active=null;save();ui.view={name:'home'};render();} return; }
   const w={id:'w'+a.ts,ts:a.ts,name:a.name,dur:Math.round((Date.now()-a.ts)/1000),entries};
   const sum=summarize(w);
-  DB.workouts.push(w); DB.active=null; save();
-  ui.view={name:'home'}; render(); showSummary(w,sum); releaseWakeLock();
+  const preB3=big3e1();
+  DB.workouts.push(w);
+  const postB3=big3e1();
+  const bosses=[];
+  BIG3.forEach(id=>MS.forEach(m=>{if(preB3[id]<m&&postB3[id]>=m)bosses.push(`${exName(id)} ${m}kg`)}));
+  const weekHit=weekStats().count===(DB.settings.weekGoal||3);
+  const prCount=sum.reduce((s,x)=>s+x.prs.length,0);
+  const gain=20+15*prCount+30*bosses.length+(weekHit?20:0);
+  DB.game.xp+=gain;
+  DB.active=null; save();
+  ui.view={name:'home'}; render(); showSummary(w,sum,{gain,bosses,weekHit}); releaseWakeLock();
 }
 function summarize(w){
   return w.entries.map(en=>{
@@ -379,21 +539,22 @@ function summarize(w){
     const prev=prevEntry(en.exId,w.ts);
     const pv=prev?entryVolume(prev.en):null, pb=prev?entryBestE1(prev.en):null;
     let history=DB.workouts.filter(x=>x.ts<w.ts).flatMap(x=>x.entries.filter(e=>e.exId===en.exId));
-    const hw=Math.max(0,...history.flatMap(e=>e.sets.map(s=>+s.w||0)));
+    const hw=Math.max(0,...history.flatMap(e=>e.sets.filter(s=>!s.wu).map(s=>+s.w||0)));
     const he=Math.max(0,...history.map(entryBestE1));
     const hv=Math.max(0,...history.map(entryVolume));
-    const mw=Math.max(0,...en.sets.map(s=>+s.w||0));
+    const mw=Math.max(0,...en.sets.filter(s=>!s.wu).map(s=>+s.w||0));
     const prs=[];
     if(history.length){ if(mw>hw)prs.push('최고 중량'); if(best>he)prs.push('최고 e1RM'); if(vol>hv)prs.push('최고 볼륨'); }
     return {exId:en.exId,vol,best,pv,pb,prs};
   });
 }
-function showSummary(w,sum){
+function showSummary(w,sum,game){
   openSheet(`<h2>운동 완료 🎉</h2>
-  <div class="row" style="gap:16px;margin-bottom:12px" >
+  <div class="row" style="gap:16px;margin-bottom:10px" >
     <span class="small muted">시간 <b class="num" style="color:var(--tx)">${fmtDur(w.dur)}</b></span>
     <span class="small muted">총 볼륨 <b class="num" style="color:var(--tx)">${kg(w.entries.reduce((s,e)=>s+entryVolume(e),0))}kg</b></span>
   </div>
+  ${game?`<div class="note num" style="margin-bottom:12px">+${game.gain} XP${game.bosses.map(b=>` · ⚔️ ${esc(b)} 처치!`).join('')}${game.weekHit?' · 🔥 주간 목표 달성':''}</div>`:''}
   <div class="stack">
   ${sum.map(s=>`<div class="card" style="margin:0">
     <div class="row between"><b>${esc(exName(s.exId))}</b>
@@ -513,11 +674,14 @@ function vHistDetail(){
   return `<div class="hd">
     <div><h1 style="font-size:19px">${esc(w.name)}</h1><span class="sub">${fmtDate(w.ts)} · ${fmtDur(w.dur||0)} · <span class="num">${kg(vol)}kg</span></span></div>
     <button class="btn sm ghost muted" data-act="tab" data-tab="hist">목록</button></div>
-  ${w.entries.map(en=>`<div class="card">
+  ${w.entries.map(en=>{
+    let mi=0;
+    return `<div class="card">
     <div class="row between"><b>${esc(exName(en.exId))}</b>
       <span class="tiny muted num">best e1RM ${kg(entryBestE1(en))}kg</span></div>
-    <div class="small num muted" style="margin-top:4px">${en.sets.map((s,i)=>`${i+1}세트 ${s.w}kg × ${s.r}`).join('<br>')}</div>
-  </div>`).join('')}
+    ${en.note?`<div class="tiny muted">📝 ${esc(en.note)}</div>`:''}
+    <div class="small num muted" style="margin-top:4px">${en.sets.map(s=>`${s.wu?'W':++mi}세트 ${s.w}kg × ${s.r}`).join('<br>')}</div>
+  </div>`}).join('')}
   <button class="btn" data-act="save-routine" data-id="${w.id}">이 구성을 루틴으로 저장</button>
   <button class="btn ghost danger" style="margin-top:8px" data-act="del-workout" data-id="${w.id}">기록 삭제</button>`;
 }
@@ -670,6 +834,8 @@ function vSettings(){
     <button class="btn sm ${s.sound?'primary':''}" data-act="toggle-sound">${s.sound?'켜짐':'꺼짐'}</button></div></div>
   <div class="card"><div class="row between"><span>휴식 종료 진동</span>
     <button class="btn sm ${s.vib?'primary':''}" data-act="toggle-vib">${s.vib?'켜짐':'꺼짐'}</button></div></div>
+  <div class="card"><div class="row between"><span>주간 운동 목표 <span class="tiny muted">(스트릭 기준)</span></span>
+    <select style="width:84px" data-in="weekgoal">${[2,3,4,5,6].map(n=>`<option value="${n}" ${(s.weekGoal||3)==n?'selected':''}>주 ${n}회</option>`).join('')}</select></div></div>
   <div class="sec-t">데이터</div>
   <div class="card stack">
     <div class="tiny muted">데이터는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 브라우저 데이터를 지우기 전에 꼭 백업하세요.</div>
@@ -677,7 +843,7 @@ function vSettings(){
     <button class="btn" data-act="import">백업 불러오기</button>
     <button class="btn ghost danger" data-act="wipe">전체 데이터 초기화</button>
   </div>
-  <div class="tiny" style="color:var(--dim);text-align:center;margin-top:18px">FitLog v1 · 세션 ${DB.workouts.length}회 · 운동 ${DB.exercises.length}종</div>`;
+  <div class="tiny" style="color:var(--dim);text-align:center;margin-top:18px">FitLog v2 · 세션 ${DB.workouts.length}회 · 운동 ${DB.exercises.length}종 · ${DB.game.xp} XP</div>`;
 }
 
 /* ---------- modal ---------- */
@@ -701,21 +867,31 @@ document.addEventListener('click',e=>{
       startWorkout(DB.routines.find(r=>r.id===id)); break;}
     case 'add-ex': openExPicker(); break;
     case 'pick-ex':
-      a.entries.push({exId:id,targetReps:'',sets:[{w:'',r:'',done:false},{w:'',r:'',done:false},{w:'',r:'',done:false}]});
+      a.entries.push(newEntry(id,3,''));
       save(); closeSheet(); render(); break;
     case 'new-ex-form': newExForm(); break;
     case 'create-ex':{
       const name=$('nx-name').value.trim(); if(!name){alert('이름을 입력하세요');break}
       const ex={id:'c'+Date.now(),name,muscle:$('nx-muscle').value,restSec:+$('nx-rest').value||90,custom:true};
       DB.exercises.push(ex); save(); closeSheet();
-      if(ui.view.name==='workout'&&a){a.entries.push({exId:ex.id,targetReps:'',sets:[{w:'',r:'',done:false},{w:'',r:'',done:false},{w:'',r:'',done:false}]});save()}
+      if(ui.view.name==='workout'&&a){a.entries.push(newEntry(ex.id,3,''));save()}
       render(); break;}
     case 'set-done': setDone(+el.dataset.ei,+el.dataset.si); break;
     case 'add-set':{
       const ss=a.entries[+el.dataset.ei].sets;
       let src=null;
-      for(let i=ss.length-1;i>=0;i--){if(ss[i].w!==''||ss[i].r!==''){src=ss[i];break}}
+      for(let i=ss.length-1;i>=0;i--){const t=ss[i];if(!t.wu&&(t.w!==''||t.r!=='')){src=t;break}}
       ss.push({w:src?src.w:'',r:src?src.r:'',done:false}); save(); render(); break;}
+    case 'mv-ex':{
+      const ei=+el.dataset.ei, j=ei+(+el.dataset.dir);
+      if(j<0||j>=a.entries.length)break;
+      [a.entries[ei],a.entries[j]]=[a.entries[j],a.entries[ei]];
+      save(); render(); break;}
+    case 'ex-note':{
+      const en=a.entries[+el.dataset.ei];
+      const v=prompt('메모 (머신 세팅, 그립 등)',en.note||'');
+      if(v===null)break;
+      en.note=v.trim(); save(); render(); break;}
     case 'edit-rest':{
       const ex=getEx(id); if(!ex)break;
       const v=prompt(`${ex.name} 휴식 시간(초)`,ex.restSec);
@@ -768,6 +944,8 @@ document.addEventListener('input',e=>{
     ui.tabFilter=el.value; $('extab-list').innerHTML=exTabListHTML();
   }else if(k==='rest'){
     const ex=getEx(el.dataset.id); if(ex){ex.restSec=Math.max(0,+el.value||0);save()}
+  }else if(k==='weekgoal'){
+    DB.settings.weekGoal=+el.value||3; save();
   }
 });
 $('importfile').addEventListener('change',e=>{
