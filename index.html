@@ -1,0 +1,774 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#101318">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>FitLog — 운동 기록</title>
+<style>
+:root{
+  --bg:#101318; --card:#1a1f27; --card2:#232a35; --line:#2b3340;
+  --tx:#e8ecf2; --mut:#8b95a5; --dim:#5c6675;
+  --ac:#ffaa4d; --ac-soft:rgba(255,170,77,.14);
+  --good:#4ade80; --bad:#f87171; --r:14px;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  background:var(--bg); color:var(--tx);
+  font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif;
+  font-size:15px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+#app{max-width:560px;margin:0 auto;padding:0 16px 132px}
+h1,h2,h3{margin:0;text-wrap:balance}
+button{font:inherit;color:inherit;background:none;border:none;padding:0;cursor:pointer}
+input,select{
+  font:inherit;font-size:16px;color:var(--tx);
+  background:var(--card2);border:1px solid var(--line);border-radius:10px;
+  padding:8px 10px;width:100%;
+}
+input:focus,select:focus{outline:2px solid var(--ac);outline-offset:-1px;border-color:transparent}
+input::placeholder{color:var(--dim)}
+.num{font-variant-numeric:tabular-nums}
+
+/* header */
+.hd{display:flex;align-items:baseline;justify-content:space-between;padding:22px 0 14px}
+.hd h1{font-size:22px;font-weight:800;letter-spacing:-.02em}
+.hd .sub{color:var(--mut);font-size:13px}
+
+/* cards */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.card.tap{transition:background .12s}
+.card.tap:active{background:var(--card2)}
+.stack{display:flex;flex-direction:column;gap:10px}
+.row{display:flex;align-items:center;gap:10px}
+.row.between{justify-content:space-between}
+.grow{flex:1;min-width:0}
+.sec-t{font-size:12px;font-weight:700;color:var(--mut);letter-spacing:.08em;text-transform:uppercase;margin:22px 0 10px}
+.muted{color:var(--mut)} .small{font-size:13px} .tiny{font-size:12px}
+.good{color:var(--good)} .bad{color:var(--bad)} .acct{color:var(--ac)}
+.ellip{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* buttons */
+.btn{
+  display:flex;align-items:center;justify-content:center;gap:8px;
+  background:var(--card2);border:1px solid var(--line);border-radius:12px;
+  padding:12px 16px;font-weight:700;font-size:15px;width:100%;
+}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--ac);border-color:var(--ac);color:#1a1205}
+.btn.ghost{background:none}
+.btn.danger{color:var(--bad)}
+.btn.sm{padding:7px 12px;font-size:13px;width:auto;border-radius:10px}
+.chip{
+  display:inline-flex;align-items:center;gap:4px;
+  background:var(--card2);border:1px solid var(--line);border-radius:99px;
+  padding:2px 10px;font-size:12px;color:var(--mut);
+}
+.chip.pr{background:var(--ac-soft);border-color:transparent;color:var(--ac);font-weight:700}
+
+/* stat blocks */
+.stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:12px 14px}
+.stat .v{font-size:20px;font-weight:800;letter-spacing:-.01em}
+.stat .k{font-size:12px;color:var(--mut);margin-top:2px}
+
+/* workout logging */
+.wex{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:14px 16px;margin-bottom:10px}
+.wex .exname{font-size:16px;font-weight:800}
+.wex .prev{font-size:12px;color:var(--mut);margin-top:2px}
+.sets{margin-top:10px;display:flex;flex-direction:column;gap:6px}
+.setrow{display:grid;grid-template-columns:28px 1fr 1fr 44px;gap:8px;align-items:center}
+.setrow .idx{color:var(--dim);font-size:13px;font-weight:700;text-align:center}
+.setrow input{text-align:center;padding:9px 4px}
+.setrow.done input{border-color:transparent;background:rgba(74,222,128,.08);color:var(--good)}
+.ck{
+  height:40px;border-radius:10px;background:var(--card2);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:18px;font-weight:800;
+}
+.setrow.done .ck{background:var(--good);border-color:var(--good);color:#0c2415}
+.sethead{display:grid;grid-template-columns:28px 1fr 1fr 44px;gap:8px;font-size:11px;color:var(--dim);text-align:center;letter-spacing:.05em}
+
+/* rest bar */
+#restbar{
+  position:fixed;left:0;right:0;bottom:64px;z-index:30;display:none;
+  max-width:560px;margin:0 auto;padding:0 12px 8px;
+}
+#restbar .inner{
+  background:var(--card2);border:1px solid var(--ac);border-radius:14px;
+  padding:10px 14px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 24px rgba(0,0,0,.5);
+}
+#restbar .t{font-size:24px;font-weight:800;min-width:74px}
+#restbar.over .inner{border-color:var(--good)}
+#restbar .bar{height:4px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:4px}
+#restbar .bar i{display:block;height:100%;background:var(--ac);border-radius:2px}
+
+/* tabs */
+#tabs{
+  position:fixed;left:0;right:0;bottom:0;z-index:40;
+  background:rgba(16,19,24,.92);backdrop-filter:blur(12px);
+  border-top:1px solid var(--line);
+  padding-bottom:env(safe-area-inset-bottom);
+}
+#tabs .in{max-width:560px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+#tabs button{
+  display:flex;flex-direction:column;align-items:center;gap:3px;
+  padding:9px 0 7px;font-size:10.5px;color:var(--dim);font-weight:600;
+}
+#tabs button.on{color:var(--ac)}
+#tabs svg{width:22px;height:22px}
+
+/* modal */
+#modal{position:fixed;inset:0;z-index:50;display:none}
+#modal .bg{position:absolute;inset:0;background:rgba(0,0,0,.6)}
+#modal .sheet{
+  position:absolute;left:0;right:0;bottom:0;max-width:560px;margin:0 auto;
+  background:var(--card);border-radius:20px 20px 0 0;border:1px solid var(--line);border-bottom:none;
+  max-height:82vh;overflow-y:auto;padding:18px 16px calc(24px + env(safe-area-inset-bottom));
+}
+.sheet h2{font-size:17px;font-weight:800;margin-bottom:12px}
+.pick{display:flex;align-items:center;gap:10px;padding:11px 4px;border-bottom:1px solid var(--line)}
+.pick:last-child{border-bottom:none}
+.pick .m{font-size:11px;color:var(--dim);background:var(--card2);border-radius:6px;padding:2px 7px;flex-shrink:0}
+
+/* table */
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{color:var(--mut);font-weight:600;text-align:left;padding:6px 4px;border-bottom:1px solid var(--line);font-size:12px}
+td{padding:7px 4px;border-bottom:1px solid var(--line)}
+tr:last-child td{border-bottom:none}
+.judge{font-size:12px;font-weight:700}
+
+/* chart */
+.chart{margin-top:8px;overflow-x:auto}
+svg text{font-family:inherit}
+
+.empty{color:var(--dim);text-align:center;padding:36px 0 28px;font-size:14px}
+.note{background:var(--ac-soft);border-radius:10px;padding:10px 12px;font-size:13px;color:var(--tx)}
+ul.plain{margin:8px 0 0;padding-left:18px;display:flex;flex-direction:column;gap:6px}
+ul.plain li{font-size:13.5px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+
+<div id="app">
+  <div id="view"></div>
+</div>
+
+<div id="restbar"></div>
+
+<nav id="tabs"><div class="in">
+  <button data-act="tab" data-tab="home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/></svg>홈</button>
+  <button data-act="tab" data-tab="hist"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>기록</button>
+  <button data-act="tab" data-tab="ex"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 12h10"/><rect x="3" y="8.5" width="3" height="7" rx="1"/><rect x="18" y="8.5" width="3" height="7" rx="1"/></svg>운동</button>
+  <button data-act="tab" data-tab="prog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="5" y="4" width="14" height="17" rx="2"/><path d="M9 4v3h6V4M9 12h6M9 16h4"/></svg>프로그램</button>
+  <button data-act="tab" data-tab="set"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M12 3v2.5M12 18.5V21M3 12h2.5M18.5 12H21M5.6 5.6l1.8 1.8M16.6 16.6l1.8 1.8M18.4 5.6l-1.8 1.8M7.4 16.6l-1.8 1.8"/></svg>설정</button>
+</div></nav>
+
+<div id="modal"><div class="bg" data-act="close-modal"></div><div class="sheet" id="sheet"></div></div>
+<input type="file" id="importfile" accept=".json" style="display:none">
+
+<script>
+/* ---------- data ---------- */
+const KEY='fitlog.v1';
+const SEED=[
+['bench','벤치프레스','가슴',150],['incline_bench','인클라인 벤치프레스','가슴',120],
+['db_bench','덤벨 벤치프레스','가슴',120],['chest_press','체스트 프레스 머신','가슴',90],
+['cable_cross','케이블 크로스오버','가슴',60],['dips','딥스','가슴',120],
+['deadlift','데드리프트','등',180],['barbell_row','바벨 로우','등',150],
+['latpulldown','랫풀다운','등',90],['seated_row','시티드 케이블 로우','등',90],
+['pullup','풀업','등',120],['db_row','덤벨 로우','등',90],
+['squat','스쿼트','하체',180],['legpress','레그 프레스','하체',120],
+['rdl','루마니안 데드리프트','하체',150],['legcurl','레그 컬','하체',60],
+['legext','레그 익스텐션','하체',60],['lunge','런지','하체',90],
+['hipthrust','힙 쓰러스트','하체',120],['calf','카프 레이즈','하체',60],
+['ohp','오버헤드 프레스','어깨',150],['db_shoulder','덤벨 숄더 프레스','어깨',120],
+['lateral','사이드 레터럴 레이즈','어깨',60],['reardelt','리어 델트 플라이','어깨',60],
+['facepull','페이스 풀','어깨',60],
+['bb_curl','바벨 컬','이두',60],['db_curl','덤벨 컬','이두',60],['hammer','해머 컬','이두',60],
+['pushdown','케이블 푸시다운','삼두',60],['lying_ext','라잉 트라이셉스 익스텐션','삼두',60],
+['crunch','크런치','코어',45],['legraise','행잉 레그 레이즈','코어',60],['plank','플랭크','코어',60],
+];
+const MUSCLES=['가슴','등','하체','어깨','이두','삼두','코어','기타'];
+
+const PROGRAMS=[
+{id:'p_fb',name:'풀바디 A/B',tag:'입문~초급 · 주 3회',
+ desc:'전신을 한 세션에 다루는 가장 기본적인 구성입니다. A와 B를 번갈아 주 3회 수행합니다 (A-B-A, 다음 주 B-A-B).',
+ days:[
+  {name:'풀바디 A',perWeek:1.5,ex:[['squat',3,'5~8'],['bench',3,'5~8'],['barbell_row',3,'8~10'],['lateral',3,'12~15'],['crunch',3,'15~20']]},
+  {name:'풀바디 B',perWeek:1.5,ex:[['deadlift',3,'5'],['ohp',3,'5~8'],['latpulldown',3,'10~12'],['legpress',3,'10~12'],['bb_curl',3,'10~12']]}],
+ notes:['세션 간 회복 시간이 충분해서 운동 시작 후 첫 6개월의 신경 적응 구간에 가장 효율이 좋습니다.','매 세션 스쿼트 계열이 들어가므로 하체 피로가 누적되면 중량보다 수면과 식사부터 점검하세요.','3개월 이상 전 종목이 정체되면 상하체 4분할로 전환을 고려할 타이밍입니다.']},
+{id:'p_55',name:'5x5 스트렝스',tag:'초급~중급 · 주 3회',
+ desc:'3대 운동 중량을 올리는 데 집중하는 클래식 프로그램입니다. 5회 5세트, 성공하면 다음 세션에 2.5kg을 더합니다.',
+ days:[
+  {name:'5x5 A',perWeek:1.5,ex:[['squat',5,'5'],['bench',5,'5'],['barbell_row',5,'5']]},
+  {name:'5x5 B',perWeek:1.5,ex:[['squat',5,'5'],['ohp',5,'5'],['deadlift',1,'5']]}],
+ notes:['근력(중량) 지향 프로그램이라 팔, 어깨 같은 부위별 사이즈 볼륨은 부족한 편입니다. 몸 만들기가 목적이면 보조 운동을 2~3개 추가하세요.','스쿼트 빈도가 매우 높습니다. 무릎이나 허리에 위화감이 오면 주 2회로 줄이세요.','같은 무게에서 2세션 연속 실패하면 그 종목만 중량을 10% 낮춰서 다시 올라옵니다 (디로드).']},
+{id:'p_ul',name:'상하체 4분할',tag:'초급~중급 · 주 4회',
+ desc:'상체 2회, 하체 2회. 부위당 주 2회 빈도로 볼륨과 회복의 균형이 좋아 가장 무난하게 오래 쓸 수 있는 구성입니다.',
+ days:[
+  {name:'상체 A (수평 위주)',perWeek:1,ex:[['bench',4,'6~8'],['barbell_row',4,'6~8'],['db_shoulder',3,'8~12'],['lateral',3,'12~15'],['pushdown',3,'10~12'],['bb_curl',3,'10~12']]},
+  {name:'하체 A',perWeek:1,ex:[['squat',4,'6~8'],['rdl',3,'8~10'],['legpress',3,'10~12'],['legcurl',3,'10~15'],['calf',4,'12~15']]},
+  {name:'상체 B (수직 위주)',perWeek:1,ex:[['ohp',4,'6~8'],['pullup',4,'6~10'],['incline_bench',3,'8~12'],['seated_row',3,'10~12'],['lateral',3,'12~15'],['hammer',3,'10~12']]},
+  {name:'하체 B',perWeek:1,ex:[['deadlift',3,'5~6'],['legpress',4,'10~12'],['lunge',3,'10~12'],['legext',3,'12~15'],['legraise',3,'12~15']]}],
+ notes:['주 4회 시간 확보가 안 되는 주가 많다면 풀바디 3회가 낫습니다. 빈도가 깨지면 이 프로그램의 장점이 사라집니다.','상체 날 세트 수가 많아 세션이 길어지기 쉽습니다. 70분 안에 끝나도록 휴식 시간을 관리하세요.','벤치프레스와 오버헤드 프레스를 다른 날로 분리해 어깨 과사용을 막아둔 구성입니다.']},
+{id:'p_ppl',name:'PPL 6분할',tag:'중급 이상 · 주 6회',
+ desc:'밀기(푸시), 당기기(풀), 하체(레그)를 각각 주 2회 수행합니다. 볼륨이 가장 크고, 그만큼 회복 요구도 가장 큽니다.',
+ days:[
+  {name:'푸시',perWeek:2,ex:[['bench',4,'6~10'],['ohp',3,'8~10'],['incline_bench',3,'8~12'],['lateral',4,'12~15'],['pushdown',3,'10~15']]},
+  {name:'풀',perWeek:2,ex:[['deadlift',2,'5'],['pullup',4,'6~10'],['barbell_row',3,'8~10'],['facepull',3,'15'],['bb_curl',3,'10~12']]},
+  {name:'레그',perWeek:2,ex:[['squat',4,'6~10'],['rdl',3,'8~10'],['legpress',3,'10~12'],['legcurl',3,'10~15'],['calf',4,'12~15']]}],
+ notes:['주 6회를 꾸준히 못 지키면 볼륨 배분이 깨집니다. 현실적으로 주 4~5회라면 상하체 4분할이 결과가 낫습니다.','수면이 7시간 미만이면 이 볼륨은 회복이 따라오지 못할 가능성이 큽니다.','데드리프트가 있는 풀 데이와 레그 데이가 연달아 붙지 않게 요일을 배치하세요.']},
+];
+
+let DB=load();
+let ui={view:{name:'home'},exFilter:'',tabFilter:''};
+if(DB.active) ui.view={name:'workout'};
+
+function load(){
+  try{
+    const d=JSON.parse(localStorage.getItem(KEY));
+    if(d&&d.exercises) return d;
+  }catch(e){}
+  return {
+    exercises:SEED.map(s=>({id:s[0],name:s[1],muscle:s[2],restSec:s[3]})),
+    workouts:[],routines:[],settings:{sound:true,vib:true},active:null
+  };
+}
+function save(){ try{localStorage.setItem(KEY,JSON.stringify(DB))}catch(e){} }
+
+/* ---------- utils ---------- */
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const getEx=id=>DB.exercises.find(e=>e.id===id);
+const exName=id=>getEx(id)?getEx(id).name:'(삭제된 운동)';
+const e1rm=(w,r)=>{w=+w||0;r=+r||0;if(!w||!r)return 0;return r===1?w:Math.round(w*(1+r/30)*10)/10};
+const kg=v=>(Math.round(v*10)/10).toLocaleString('ko-KR');
+const DOW=['일','월','화','수','목','금','토'];
+function fmtDate(ts){const d=new Date(ts);return `${d.getMonth()+1}월 ${d.getDate()}일 (${DOW[d.getDay()]})`}
+function fmtDateShort(ts){const d=new Date(ts);return `${d.getMonth()+1}/${d.getDate()}`}
+function fmtDur(sec){sec=Math.max(0,Math.round(sec));const m=Math.floor(sec/60),s=sec%60;return m>=60?`${Math.floor(m/60)}시간 ${m%60}분`:`${m}분 ${s}초`}
+function clock(sec){sec=Math.max(0,Math.round(sec));return `${Math.floor(sec/60)}:${String(sec%60).padStart(2,'0')}`}
+function sorted(){return [...DB.workouts].sort((a,b)=>b.ts-a.ts)}
+function entryVolume(en){return en.sets.reduce((s,x)=>s+(+x.w||0)*(+x.r||0),0)}
+function entryBestE1(en){return Math.max(0,...en.sets.map(s=>e1rm(s.w,s.r)))}
+function prevEntry(exId,beforeTs){
+  for(const w of sorted()){ if(beforeTs&&w.ts>=beforeTs) continue;
+    const en=w.entries.find(e=>e.exId===exId); if(en&&en.sets.length) return {w,en}; }
+  return null;
+}
+
+/* ---------- render root ---------- */
+function render(){
+  const v=ui.view;
+  const map={home:vHome,workout:vWorkout,hist:vHist,histDetail:vHistDetail,ex:vExTab,exDetail:vExDetail,prog:vProg,progDetail:vProgDetail,set:vSettings};
+  $('view').innerHTML=(map[v.name]||vHome)();
+  const group={home:'home',workout:'home',hist:'hist',histDetail:'hist',ex:'ex',exDetail:'ex',prog:'prog',progDetail:'prog',set:'set'}[v.name]||'home';
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===group));
+  renderRest();
+  window.scrollTo(0,0);
+}
+
+/* ---------- home ---------- */
+function weekStats(){
+  const now=new Date(); const day=(now.getDay()+6)%7;
+  const mon=new Date(now.getFullYear(),now.getMonth(),now.getDate()-day).getTime();
+  const ws=DB.workouts.filter(w=>w.ts>=mon);
+  const vol=ws.reduce((s,w)=>s+w.entries.reduce((a,e)=>a+entryVolume(e),0),0);
+  return {count:ws.length,vol};
+}
+function vHome(){
+  const wk=weekStats(); const recent=sorted().slice(0,3);
+  return `
+  <div class="hd"><h1>FitLog</h1><span class="sub">${fmtDate(Date.now())}</span></div>
+  ${DB.active?`<button class="btn primary" data-act="tab" data-tab="home" style="margin-bottom:10px">진행 중인 운동으로 돌아가기</button>`:`
+  <button class="btn primary" data-act="start-empty">빈 운동 시작</button>`}
+  <div class="stats" style="margin-top:14px">
+    <div class="stat"><div class="v num">${wk.count}회</div><div class="k">이번 주 운동</div></div>
+    <div class="stat"><div class="v num">${kg(wk.vol)}</div><div class="k">이번 주 볼륨(kg)</div></div>
+    <div class="stat"><div class="v num">${DB.workouts.length}</div><div class="k">누적 세션</div></div>
+  </div>
+  <div class="sec-t">내 루틴</div>
+  ${DB.routines.length?DB.routines.map(r=>`
+    <div class="card"><div class="row between">
+      <div class="grow" style="min-width:0">
+        <div style="font-weight:700" class="ellip">${esc(r.name)}</div>
+        <div class="tiny muted ellip">${r.ex.map(x=>exName(x.exId)).join(', ')}</div>
+      </div>
+      <button class="btn sm" data-act="start-routine" data-id="${r.id}">시작</button>
+    </div></div>`).join(''):`<div class="empty">아직 루틴이 없습니다.<br>프로그램 탭에서 가져오거나, 운동을 마친 뒤 루틴으로 저장하세요.</div>`}
+  <div class="sec-t">최근 기록</div>
+  ${recent.length?recent.map(histCard).join(''):`<div class="empty">첫 운동을 시작해 보세요.</div>`}`;
+}
+
+/* ---------- workout ---------- */
+function startWorkout(routine){
+  DB.active={
+    ts:Date.now(), name:routine?routine.name:'운동',
+    entries:(routine?routine.ex:[]).map(x=>({exId:x.exId,targetReps:x.reps||'',
+      sets:Array.from({length:x.sets||3},()=>({w:'',r:'',done:false}))})),
+    rest:null
+  };
+  save(); ui.view={name:'workout'}; render(); reqWakeLock();
+}
+function vWorkout(){
+  const a=DB.active;
+  return `
+  <div class="hd">
+    <div><h1 style="font-size:18px">${esc(a.name)}</h1>
+      <span class="sub num" id="elapsed">${clock((Date.now()-a.ts)/1000)}</span></div>
+    <button class="btn sm primary" data-act="finish">완료</button>
+  </div>
+  ${a.entries.length?a.entries.map((en,ei)=>{
+    const ex=getEx(en.exId); const prev=prevEntry(en.exId,a.ts);
+    const prevTxt=prev?`지난번 (${fmtDateShort(prev.w.ts)}): ${prev.en.sets.map(s=>`${s.w}×${s.r}`).join(', ')}`
+      :(en.targetReps?`목표 ${en.targetReps}회`:'첫 기록입니다');
+    return `<div class="wex">
+      <div class="row between">
+        <div class="grow"><div class="exname">${esc(ex?ex.name:'?')}</div>
+        <div class="prev num">${esc(prevTxt)}</div></div>
+        <button class="btn sm ghost danger" data-act="del-ex" data-ei="${ei}">삭제</button>
+      </div>
+      <div class="sets">
+        <div class="sethead"><span></span><span>무게(kg)</span><span>회수</span><span></span></div>
+        ${en.sets.map((s,si)=>{
+          const ph=prev&&prev.en.sets[si]?prev.en.sets[si]:null;
+          return `<div class="setrow ${s.done?'done':''}">
+            <span class="idx num">${si+1}</span>
+            <input class="num" inputmode="decimal" data-in="w" data-ei="${ei}" data-si="${si}" value="${esc(s.w)}" placeholder="${ph?ph.w:''}">
+            <input class="num" inputmode="numeric" data-in="r" data-ei="${ei}" data-si="${si}" value="${esc(s.r)}" placeholder="${ph?ph.r:esc(en.targetReps||'')}">
+            <button class="ck" data-act="set-done" data-ei="${ei}" data-si="${si}">✓</button>
+          </div>`}).join('')}
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="btn sm" data-act="add-set" data-ei="${ei}">＋ 세트</button>
+        <button class="btn sm ghost muted" data-act="del-set" data-ei="${ei}">－ 세트</button>
+        <span class="grow"></span>
+        <span class="tiny muted num">휴식 ${ex?ex.restSec:60}초</span>
+      </div>
+    </div>`}).join(''):`<div class="empty">아래 버튼으로 운동을 추가하세요.</div>`}
+  <button class="btn" data-act="add-ex">＋ 운동 추가</button>
+  <button class="btn ghost danger" style="margin-top:8px" data-act="cancel-workout">운동 취소</button>`;
+}
+function setDone(ei,si){
+  const a=DB.active; const en=a.entries[ei]; const s=en.sets[si];
+  if(s.done){ s.done=false; save(); render(); return; }
+  const prev=prevEntry(en.exId,a.ts); const ph=prev&&prev.en.sets[si]?prev.en.sets[si]:null;
+  if(s.w===''&&ph) s.w=ph.w; if(s.r===''&&ph) s.r=ph.r;
+  if(s.r===''&&en.targetReps){const m=String(en.targetReps).match(/\d+/);if(m)s.r=m[0]}
+  s.done=true;
+  const ex=getEx(en.exId);
+  a.rest={end:Date.now()+(ex?ex.restSec:60)*1000,total:(ex?ex.restSec:60),fired:false};
+  save(); render();
+}
+function finishWorkout(){
+  const a=DB.active;
+  const entries=a.entries.map(en=>({exId:en.exId,sets:en.sets.filter(s=>s.done&&(+s.w||+s.r))
+    .map(s=>({w:+s.w||0,r:+s.r||0}))})).filter(en=>en.sets.length);
+  if(!entries.length){ if(confirm('완료된 세트가 없습니다. 기록 없이 종료할까요?')){DB.active=null;save();ui.view={name:'home'};render();} return; }
+  const w={id:'w'+a.ts,ts:a.ts,name:a.name,dur:Math.round((Date.now()-a.ts)/1000),entries};
+  const sum=summarize(w);
+  DB.workouts.push(w); DB.active=null; save();
+  ui.view={name:'home'}; render(); showSummary(w,sum); releaseWakeLock();
+}
+function summarize(w){
+  return w.entries.map(en=>{
+    const vol=entryVolume(en), best=entryBestE1(en);
+    const prev=prevEntry(en.exId,w.ts);
+    const pv=prev?entryVolume(prev.en):null, pb=prev?entryBestE1(prev.en):null;
+    let history=DB.workouts.filter(x=>x.ts<w.ts).flatMap(x=>x.entries.filter(e=>e.exId===en.exId));
+    const hw=Math.max(0,...history.flatMap(e=>e.sets.map(s=>+s.w||0)));
+    const he=Math.max(0,...history.map(entryBestE1));
+    const hv=Math.max(0,...history.map(entryVolume));
+    const mw=Math.max(0,...en.sets.map(s=>+s.w||0));
+    const prs=[];
+    if(history.length){ if(mw>hw)prs.push('최고 중량'); if(best>he)prs.push('최고 e1RM'); if(vol>hv)prs.push('최고 볼륨'); }
+    return {exId:en.exId,vol,best,pv,pb,prs};
+  });
+}
+function showSummary(w,sum){
+  openSheet(`<h2>운동 완료 🎉</h2>
+  <div class="row" style="gap:16px;margin-bottom:12px" >
+    <span class="small muted">시간 <b class="num" style="color:var(--tx)">${fmtDur(w.dur)}</b></span>
+    <span class="small muted">총 볼륨 <b class="num" style="color:var(--tx)">${kg(w.entries.reduce((s,e)=>s+entryVolume(e),0))}kg</b></span>
+  </div>
+  <div class="stack">
+  ${sum.map(s=>`<div class="card" style="margin:0">
+    <div class="row between"><b>${esc(exName(s.exId))}</b>
+      <span>${s.prs.map(p=>`<span class="chip pr">🏆 ${p}</span>`).join(' ')}</span></div>
+    <div class="small num" style="margin-top:4px">
+      볼륨 ${kg(s.vol)}kg ${s.pv!=null?delta(s.vol-s.pv,'kg'):''}<br>
+      최고 e1RM ${kg(s.best)}kg ${s.pb!=null?delta(s.best-s.pb,'kg'):''}
+    </div></div>`).join('')}
+  </div>
+  <button class="btn primary" style="margin-top:14px" data-act="close-modal">확인</button>`);
+}
+function delta(d,unit){
+  d=Math.round(d*10)/10;
+  if(Math.abs(d)<0.05) return `<span class="muted tiny">(지난번과 동일)</span>`;
+  return d>0?`<span class="good tiny">(▲ ${kg(Math.abs(d))}${unit})</span>`:`<span class="bad tiny">(▼ ${kg(Math.abs(d))}${unit})</span>`;
+}
+
+/* exercise picker */
+function openExPicker(){
+  ui.exFilter='';
+  openSheet(`<h2>운동 추가</h2>
+    <input data-in="exsearch" placeholder="검색" style="margin-bottom:8px" autocomplete="off">
+    <div id="exlist">${exListHTML('')}</div>
+    <button class="btn" style="margin-top:12px" data-act="new-ex-form">＋ 새 운동 만들기</button>`);
+}
+function exListHTML(q){
+  q=(q||'').trim().toLowerCase();
+  const list=DB.exercises.filter(e=>!q||e.name.toLowerCase().includes(q));
+  if(!list.length) return `<div class="empty">검색 결과가 없습니다.</div>`;
+  return MUSCLES.map(m=>{
+    const g=list.filter(e=>e.muscle===m); if(!g.length)return '';
+    return g.map(e=>`<button class="pick" style="width:100%;text-align:left" data-act="pick-ex" data-id="${e.id}">
+      <span class="m">${m}</span><span class="grow ellip">${esc(e.name)}</span>
+      <span class="tiny muted num">${e.restSec}초</span></button>`).join('');
+  }).join('');
+}
+function newExForm(){
+  openSheet(`<h2>새 운동</h2>
+  <div class="stack">
+    <input id="nx-name" placeholder="운동 이름" autocomplete="off">
+    <select id="nx-muscle">${MUSCLES.map(m=>`<option>${m}</option>`).join('')}</select>
+    <div class="row"><span class="small muted" style="flex-shrink:0">휴식(초)</span>
+      <input id="nx-rest" class="num" inputmode="numeric" value="90"></div>
+    <button class="btn primary" data-act="create-ex">추가</button>
+  </div>`);
+}
+
+/* ---------- rest bar ---------- */
+function renderRest(){
+  const bar=$('restbar'); const a=DB.active;
+  if(!a||!a.rest){bar.style.display='none';return}
+  const R=a.rest; const left=(R.end-Date.now())/1000;
+  if(left<=-4){a.rest=null;save();bar.style.display='none';return}
+  bar.style.display='block';
+  bar.classList.toggle('over',left<=0);
+  const pct=Math.max(0,Math.min(100,left/R.total*100));
+  bar.innerHTML=`<div class="inner">
+    <div class="grow">
+      <div class="row between"><span class="t num" style="color:${left<=0?'var(--good)':'var(--ac)'}">${left<=0?'휴식 끝!':clock(left)}</span>
+      <span class="row" style="gap:6px">
+        <button class="btn sm" data-act="rest-sub">-30초</button>
+        <button class="btn sm" data-act="rest-add">+30초</button>
+        <button class="btn sm ghost muted" data-act="rest-skip">건너뛰기</button>
+      </span></div>
+      <div class="bar"><i style="width:${pct}%"></i></div>
+    </div></div>`;
+}
+setInterval(()=>{
+  const a=DB.active; if(!a)return;
+  const el=$('elapsed'); if(el)el.textContent=clock((Date.now()-a.ts)/1000);
+  if(a.rest){ renderRest();
+    if(!a.rest.fired&&Date.now()>=a.rest.end){a.rest.fired=true;save();notifyRestEnd();} }
+},500);
+let AC=null;
+document.addEventListener('pointerdown',()=>{
+  if(!AC){try{AC=new (window.AudioContext||window.webkitAudioContext)()}catch(e){}}
+  if(AC&&AC.state==='suspended')AC.resume();
+},{passive:true});
+function notifyRestEnd(){
+  if(DB.settings.vib&&navigator.vibrate)navigator.vibrate([200,120,200,120,400]);
+  if(DB.settings.sound&&AC){try{
+    [0,.22,.44].forEach((t,i)=>{
+      const o=AC.createOscillator(),g=AC.createGain();
+      o.connect(g);g.connect(AC.destination);o.type='sine';
+      o.frequency.value=i===2?1174:880;
+      const s=AC.currentTime+t;
+      g.gain.setValueAtTime(.001,s);
+      g.gain.exponentialRampToValueAtTime(.35,s+.02);
+      g.gain.exponentialRampToValueAtTime(.001,s+.18);
+      o.start(s);o.stop(s+.2);
+    });
+  }catch(e){}}
+}
+let wakeLock=null;
+async function reqWakeLock(){try{if(DB.active&&'wakeLock'in navigator)wakeLock=await navigator.wakeLock.request('screen')}catch(e){}}
+function releaseWakeLock(){try{wakeLock&&wakeLock.release();wakeLock=null}catch(e){}}
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&DB.active)reqWakeLock()});
+
+/* ---------- history ---------- */
+function histCard(w){
+  const vol=w.entries.reduce((s,e)=>s+entryVolume(e),0);
+  return `<button class="card tap" style="width:100%;text-align:left" data-act="view" data-view="histDetail" data-id="${w.id}">
+    <div class="row between"><b>${esc(w.name)}</b><span class="tiny muted num">${fmtDate(w.ts)}</span></div>
+    <div class="tiny muted ellip" style="margin-top:2px">${w.entries.map(e=>exName(e.exId)).join(', ')}</div>
+    <div class="tiny num" style="margin-top:4px"><span class="acct">${kg(vol)}kg</span> · ${fmtDur(w.dur||0)} · ${w.entries.reduce((s,e)=>s+e.sets.length,0)}세트</div>
+  </button>`;
+}
+function vHist(){
+  const list=sorted();
+  return `<div class="hd"><h1>기록</h1><span class="sub num">${list.length}회</span></div>
+  ${list.length?list.map(histCard).join(''):'<div class="empty">아직 기록이 없습니다.</div>'}`;
+}
+function vHistDetail(){
+  const w=DB.workouts.find(x=>x.id===ui.view.id);
+  if(!w)return vHist();
+  const vol=w.entries.reduce((s,e)=>s+entryVolume(e),0);
+  return `<div class="hd">
+    <div><h1 style="font-size:19px">${esc(w.name)}</h1><span class="sub">${fmtDate(w.ts)} · ${fmtDur(w.dur||0)} · <span class="num">${kg(vol)}kg</span></span></div>
+    <button class="btn sm ghost muted" data-act="tab" data-tab="hist">목록</button></div>
+  ${w.entries.map(en=>`<div class="card">
+    <div class="row between"><b>${esc(exName(en.exId))}</b>
+      <span class="tiny muted num">best e1RM ${kg(entryBestE1(en))}kg</span></div>
+    <div class="small num muted" style="margin-top:4px">${en.sets.map((s,i)=>`${i+1}세트 ${s.w}kg × ${s.r}`).join('<br>')}</div>
+  </div>`).join('')}
+  <button class="btn" data-act="save-routine" data-id="${w.id}">이 구성을 루틴으로 저장</button>
+  <button class="btn ghost danger" style="margin-top:8px" data-act="del-workout" data-id="${w.id}">기록 삭제</button>`;
+}
+
+/* ---------- exercises tab ---------- */
+function bestE1For(exId){
+  let b=0; DB.workouts.forEach(w=>w.entries.forEach(en=>{if(en.exId===exId)b=Math.max(b,entryBestE1(en))}));
+  return b;
+}
+function vExTab(){
+  const q=(ui.tabFilter||'').trim().toLowerCase();
+  const list=DB.exercises.filter(e=>!q||e.name.toLowerCase().includes(q));
+  return `<div class="hd"><h1>운동</h1><button class="btn sm" data-act="new-ex-form">＋ 추가</button></div>
+  <input data-in="tabsearch" placeholder="검색" value="${esc(ui.tabFilter)}" autocomplete="off" style="margin-bottom:12px">
+  <div id="extab-list">${exTabListHTML(list)}</div>`;
+}
+function exTabListHTML(list){
+  list=list||DB.exercises.filter(e=>{const q=(ui.tabFilter||'').trim().toLowerCase();return !q||e.name.toLowerCase().includes(q)});
+  return MUSCLES.map(m=>{
+    const g=list.filter(e=>e.muscle===m); if(!g.length)return '';
+    return `<div class="sec-t" style="margin-top:14px">${m}</div>`+g.map(e=>{
+      const b=bestE1For(e.id);
+      return `<button class="card tap" style="width:100%;text-align:left;padding:11px 16px" data-act="view" data-view="exDetail" data-id="${e.id}">
+      <div class="row between"><span class="ellip">${esc(e.name)}</span>
+      <span class="tiny muted num">${b?`e1RM ${kg(b)}kg`:'기록 없음'}</span></div></button>`;
+    }).join('');
+  }).join('')||'<div class="empty">검색 결과가 없습니다.</div>';
+}
+function exSessions(exId){
+  return sorted().map(w=>{const en=w.entries.find(e=>e.exId===exId);return en?{w,en}:null}).filter(Boolean);
+}
+function vExDetail(){
+  const ex=getEx(ui.view.id); if(!ex)return vExTab();
+  const ses=exSessions(ex.id);
+  const bw=Math.max(0,...ses.flatMap(s=>s.en.sets.map(x=>+x.w||0)));
+  const be=Math.max(0,...ses.map(s=>entryBestE1(s.en)));
+  const bv=Math.max(0,...ses.map(s=>entryVolume(s.en)));
+  const pts=[...ses].reverse().slice(-12).map(s=>({t:s.w.ts,v:entryBestE1(s.en)}));
+  return `<div class="hd">
+    <div><h1 style="font-size:19px">${esc(ex.name)}</h1><span class="sub">${ex.muscle} · <span class="num">${ses.length}회 수행</span></span></div>
+    <button class="btn sm ghost muted" data-act="tab" data-tab="ex">목록</button></div>
+  <div class="stats">
+    <div class="stat"><div class="v num">${bw?kg(bw):'–'}</div><div class="k">최고 중량(kg)</div></div>
+    <div class="stat"><div class="v num">${be?kg(be):'–'}</div><div class="k">최고 e1RM(kg)</div></div>
+    <div class="stat"><div class="v num">${bv?kg(bv):'–'}</div><div class="k">최고 볼륨(kg)</div></div>
+  </div>
+  <div class="sec-t">e1RM 추이</div>
+  <div class="card">${pts.length>=2?chartSVG(pts):'<div class="empty" style="padding:20px 0">기록이 2회 이상 쌓이면 그래프가 표시됩니다.</div>'}</div>
+  <div class="sec-t">휴식 시간</div>
+  <div class="card"><div class="row">
+    <span class="small grow">세트 완료 후 자동 타이머(초)</span>
+    <input class="num" style="width:90px;text-align:center" inputmode="numeric" data-in="rest" data-id="${ex.id}" value="${ex.restSec}">
+  </div></div>
+  <div class="sec-t">최근 세션</div>
+  ${ses.slice(0,8).map(s=>`<div class="card" style="padding:11px 16px">
+    <div class="row between"><span class="tiny muted num">${fmtDate(s.w.ts)}</span>
+    <span class="tiny num">best ${kg(entryBestE1(s.en))}kg · 볼륨 ${kg(entryVolume(s.en))}kg</span></div>
+    <div class="small num" style="margin-top:2px">${s.en.sets.map(x=>`${x.w}×${x.r}`).join(', ')}</div>
+  </div>`).join('')||'<div class="empty">아직 기록이 없습니다.</div>'}
+  ${ses.length?'':`<button class="btn ghost danger" data-act="del-ex-lib" data-id="${ex.id}">이 운동 삭제</button>`}`;
+}
+function chartSVG(pts){
+  const W=480,H=170,P={l:44,r:14,t:16,b:26};
+  const vs=pts.map(p=>p.v);
+  let lo=Math.min(...vs),hi=Math.max(...vs);
+  if(hi-lo<2){hi+=1;lo-=1}
+  const pad=(hi-lo)*0.12; lo-=pad; hi+=pad;
+  const X=i=>P.l+(pts.length===1?0:(W-P.l-P.r)*i/(pts.length-1));
+  const Y=v=>P.t+(H-P.t-P.b)*(1-(v-lo)/(hi-lo));
+  const line=pts.map((p,i)=>`${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join(' ');
+  const area=`${P.l},${H-P.b} ${line} ${X(pts.length-1).toFixed(1)},${H-P.b}`;
+  const gy=[0,.5,1].map(f=>{const v=lo+(hi-lo)*f;const y=Y(v);
+    return `<line x1="${P.l}" y1="${y}" x2="${W-P.r}" y2="${y}" stroke="#2b3340" stroke-width="1"/>
+    <text x="${P.l-6}" y="${y+4}" fill="#5c6675" font-size="10" text-anchor="end">${Math.round(v)}</text>`}).join('');
+  const last=pts[pts.length-1];
+  return `<div class="chart"><svg viewBox="0 0 ${W} ${H}" width="100%" style="min-width:300px">
+    ${gy}
+    <polygon points="${area}" fill="rgba(255,170,77,.10)"/>
+    <polyline points="${line}" fill="none" stroke="#ffaa4d" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+    ${pts.map((p,i)=>`<circle cx="${X(i)}" cy="${Y(p.v)}" r="${i===pts.length-1?4.5:3}" fill="${i===pts.length-1?'#ffaa4d':'#1a1f27'}" stroke="#ffaa4d" stroke-width="2"/>`).join('')}
+    <text x="${P.l}" y="${H-8}" fill="#5c6675" font-size="10">${fmtDateShort(pts[0].t)}</text>
+    <text x="${W-P.r}" y="${H-8}" fill="#5c6675" font-size="10" text-anchor="end">${fmtDateShort(last.t)}</text>
+    <text x="${Math.min(X(pts.length-1),W-P.r-4)}" y="${Y(last.v)-10}" fill="#ffaa4d" font-size="11" font-weight="700" text-anchor="end">${kg(last.v)}kg</text>
+  </svg></div>`;
+}
+
+/* ---------- programs ---------- */
+function weeklySets(prog){
+  const acc={};
+  prog.days.forEach(d=>d.ex.forEach(([id,sets])=>{
+    const ex=getEx(id); const m=ex?ex.muscle:'기타';
+    acc[m]=(acc[m]||0)+sets*d.perWeek;
+  }));
+  return acc;
+}
+function judge(n){
+  if(n<6)return `<span class="judge muted">보조 수준</span>`;
+  if(n<10)return `<span class="judge" style="color:#facc15">적은 편</span>`;
+  if(n<=20)return `<span class="judge good">적정</span>`;
+  return `<span class="judge bad">많은 편</span>`;
+}
+function vProg(){
+  return `<div class="hd"><h1>프로그램</h1></div>
+  ${DB.routines.length?`<div class="sec-t">내 루틴</div>`+DB.routines.map(r=>`
+    <div class="card"><div class="row between">
+      <div class="grow" style="min-width:0">
+        <div style="font-weight:700" class="ellip">${esc(r.name)}</div>
+        <div class="tiny muted ellip">${r.ex.map(x=>`${exName(x.exId)} ${x.sets}세트`).join(', ')}</div>
+      </div>
+      <div class="row" style="gap:6px;flex-shrink:0">
+        <button class="btn sm" data-act="start-routine" data-id="${r.id}">시작</button>
+        <button class="btn sm ghost danger" data-act="del-routine" data-id="${r.id}">삭제</button>
+      </div></div></div>`).join(''):''}
+  <div class="sec-t">추천 프로그램</div>
+  ${PROGRAMS.map(p=>`<button class="card tap" style="width:100%;text-align:left" data-act="view" data-view="progDetail" data-id="${p.id}">
+    <div class="row between"><b>${p.name}</b><span class="chip">${p.tag}</span></div>
+    <div class="small muted" style="margin-top:4px">${p.desc}</div>
+  </button>`).join('')}
+  <div class="note" style="margin-top:14px">프로그램을 열면 부위별 주간 세트 수와 시작 전 고려할 부분을 확인할 수 있습니다.</div>`;
+}
+function vProgDetail(){
+  const p=PROGRAMS.find(x=>x.id===ui.view.id); if(!p)return vProg();
+  const wk=weeklySets(p);
+  return `<div class="hd">
+    <div><h1 style="font-size:19px">${p.name}</h1><span class="sub">${p.tag}</span></div>
+    <button class="btn sm ghost muted" data-act="tab" data-tab="prog">목록</button></div>
+  <p class="small muted" style="margin:0 0 14px">${p.desc}</p>
+  ${p.days.map(d=>`<div class="card">
+    <div class="row between"><b>${d.name}</b><span class="tiny muted num">주 ${d.perWeek}회</span></div>
+    <div class="small muted num" style="margin-top:4px">${d.ex.map(([id,s,r])=>`${exName(id)} ${s}×${r}`).join('<br>')}</div>
+  </div>`).join('')}
+  <div class="sec-t">부위별 주간 세트 수</div>
+  <div class="card"><table>
+    <tr><th>부위</th><th style="text-align:right">주간 세트</th><th style="text-align:right">평가</th></tr>
+    ${MUSCLES.filter(m=>wk[m]).map(m=>`<tr><td>${m}</td>
+      <td class="num" style="text-align:right">${Math.round(wk[m]*10)/10}</td>
+      <td style="text-align:right">${judge(wk[m])}</td></tr>`).join('')}
+  </table>
+  <div class="tiny muted" style="margin-top:8px">일반 가이드: 키우려는 부위당 주 10~20세트. 초급자는 10세트 전후로도 충분히 성장합니다. 이두·삼두는 가슴·등 운동에서 간접 자극을 받으므로 표기보다 실제 볼륨은 더 큽니다. 하체는 대퇴사두, 햄스트링, 종아리를 합산한 수치라 다른 부위보다 크게 나오는 것이 정상입니다.</div></div>
+  <div class="sec-t">시작 전 고려할 부분</div>
+  <div class="card"><ul class="plain">${p.notes.map(n=>`<li>${n}</li>`).join('')}</ul></div>
+  <button class="btn primary" style="margin-top:6px" data-act="adopt-prog" data-id="${p.id}">이 프로그램 루틴 가져오기</button>`;
+}
+
+/* ---------- settings ---------- */
+function vSettings(){
+  const s=DB.settings;
+  return `<div class="hd"><h1>설정</h1></div>
+  <div class="card"><div class="row between"><span>휴식 종료 사운드</span>
+    <button class="btn sm ${s.sound?'primary':''}" data-act="toggle-sound">${s.sound?'켜짐':'꺼짐'}</button></div></div>
+  <div class="card"><div class="row between"><span>휴식 종료 진동</span>
+    <button class="btn sm ${s.vib?'primary':''}" data-act="toggle-vib">${s.vib?'켜짐':'꺼짐'}</button></div></div>
+  <div class="sec-t">데이터</div>
+  <div class="card stack">
+    <div class="tiny muted">데이터는 이 브라우저에만 저장됩니다. 기기를 바꾸거나 브라우저 데이터를 지우기 전에 꼭 백업하세요.</div>
+    <button class="btn" data-act="export">JSON으로 백업</button>
+    <button class="btn" data-act="import">백업 불러오기</button>
+    <button class="btn ghost danger" data-act="wipe">전체 데이터 초기화</button>
+  </div>
+  <div class="tiny" style="color:var(--dim);text-align:center;margin-top:18px">FitLog v1 · 세션 ${DB.workouts.length}회 · 운동 ${DB.exercises.length}종</div>`;
+}
+
+/* ---------- modal ---------- */
+function openSheet(html){$('sheet').innerHTML=html;$('modal').style.display='block'}
+function closeSheet(){$('modal').style.display='none'}
+
+/* ---------- actions ---------- */
+document.addEventListener('click',e=>{
+  const el=e.target.closest('[data-act]'); if(!el)return;
+  const act=el.dataset.act, id=el.dataset.id;
+  const a=DB.active;
+  switch(act){
+    case 'tab':{
+      const t=el.dataset.tab;
+      ui.view=(t==='home'&&DB.active)?{name:'workout'}:{name:t};
+      render(); break;}
+    case 'view': ui.view={name:el.dataset.view,id}; render(); break;
+    case 'start-empty': startWorkout(null); break;
+    case 'start-routine':{
+      if(DB.active&&!confirm('진행 중인 운동이 있습니다. 버리고 새로 시작할까요?'))break;
+      startWorkout(DB.routines.find(r=>r.id===id)); break;}
+    case 'add-ex': openExPicker(); break;
+    case 'pick-ex':
+      a.entries.push({exId:id,targetReps:'',sets:[{w:'',r:'',done:false},{w:'',r:'',done:false},{w:'',r:'',done:false}]});
+      save(); closeSheet(); render(); break;
+    case 'new-ex-form': newExForm(); break;
+    case 'create-ex':{
+      const name=$('nx-name').value.trim(); if(!name){alert('이름을 입력하세요');break}
+      const ex={id:'c'+Date.now(),name,muscle:$('nx-muscle').value,restSec:+$('nx-rest').value||90,custom:true};
+      DB.exercises.push(ex); save(); closeSheet();
+      if(ui.view.name==='workout'&&a){a.entries.push({exId:ex.id,targetReps:'',sets:[{w:'',r:'',done:false},{w:'',r:'',done:false},{w:'',r:'',done:false}]});save()}
+      render(); break;}
+    case 'set-done': setDone(+el.dataset.ei,+el.dataset.si); break;
+    case 'add-set': a.entries[+el.dataset.ei].sets.push({w:'',r:'',done:false}); save(); render(); break;
+    case 'del-set':{const ss=a.entries[+el.dataset.ei].sets; if(ss.length>1)ss.pop(); save(); render(); break;}
+    case 'del-ex': if(confirm('이 운동을 목록에서 뺄까요?')){a.entries.splice(+el.dataset.ei,1);save();render()} break;
+    case 'finish': finishWorkout(); break;
+    case 'cancel-workout': if(confirm('기록을 저장하지 않고 운동을 취소할까요?')){DB.active=null;save();ui.view={name:'home'};render();releaseWakeLock()} break;
+    case 'rest-add': a.rest.end+=30000; a.rest.total+=30; a.rest.fired=false; save(); renderRest(); break;
+    case 'rest-sub': a.rest.end-=30000; save(); renderRest(); break;
+    case 'rest-skip': a.rest=null; save(); renderRest(); break;
+    case 'del-workout': if(confirm('이 기록을 삭제할까요?')){DB.workouts=DB.workouts.filter(w=>w.id!==id);save();ui.view={name:'hist'};render()} break;
+    case 'save-routine':{
+      const w=DB.workouts.find(x=>x.id===id); if(!w)break;
+      const name=prompt('루틴 이름',w.name); if(name===null)break;
+      DB.routines.push({id:'r'+Date.now(),name:name||w.name,
+        ex:w.entries.map(en=>({exId:en.exId,sets:en.sets.length,reps:String(en.sets[en.sets.length-1].r||'')}))});
+      save(); alert('루틴으로 저장했습니다.'); render(); break;}
+    case 'del-routine': if(confirm('이 루틴을 삭제할까요?')){DB.routines=DB.routines.filter(r=>r.id!==id);save();render()} break;
+    case 'adopt-prog':{
+      const p=PROGRAMS.find(x=>x.id===id); if(!p)break;
+      p.days.forEach((d,i)=>DB.routines.push({id:'r'+Date.now()+'_'+i,name:`${p.name} — ${d.name}`,
+        ex:d.ex.map(([exId,sets,reps])=>({exId,sets,reps}))}));
+      save(); alert(`루틴 ${p.days.length}개를 추가했습니다. 홈 탭에서 시작할 수 있어요.`);
+      ui.view={name:'prog'}; render(); break;}
+    case 'del-ex-lib': if(confirm('이 운동을 삭제할까요?')){DB.exercises=DB.exercises.filter(x=>x.id!==id);save();ui.view={name:'ex'};render()} break;
+    case 'toggle-sound': DB.settings.sound=!DB.settings.sound; save(); render(); break;
+    case 'toggle-vib': DB.settings.vib=!DB.settings.vib; save(); render(); break;
+    case 'export':{
+      const blob=new Blob([JSON.stringify(DB,null,1)],{type:'application/json'});
+      const u=URL.createObjectURL(blob); const link=document.createElement('a');
+      const d=new Date(); link.download=`fitlog-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
+      link.href=u; link.click(); setTimeout(()=>URL.revokeObjectURL(u),3000); break;}
+    case 'import': $('importfile').click(); break;
+    case 'wipe': if(confirm('모든 기록과 루틴이 삭제됩니다. 계속할까요?')&&confirm('정말 초기화할까요? 되돌릴 수 없습니다.')){localStorage.removeItem(KEY);DB=load();ui.view={name:'home'};render()} break;
+    case 'close-modal': closeSheet(); break;
+  }
+});
+document.addEventListener('input',e=>{
+  const el=e.target, k=el.dataset.in; if(!k)return;
+  if(k==='w'||k==='r'){
+    const s=DB.active.entries[+el.dataset.ei].sets[+el.dataset.si];
+    s[k]=el.value; save();
+  }else if(k==='exsearch'){
+    ui.exFilter=el.value; $('exlist').innerHTML=exListHTML(ui.exFilter);
+  }else if(k==='tabsearch'){
+    ui.tabFilter=el.value; $('extab-list').innerHTML=exTabListHTML();
+  }else if(k==='rest'){
+    const ex=getEx(el.dataset.id); if(ex){ex.restSec=Math.max(0,+el.value||0);save()}
+  }
+});
+$('importfile').addEventListener('change',e=>{
+  const f=e.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{try{
+    const d=JSON.parse(rd.result);
+    if(!d||!Array.isArray(d.workouts)||!Array.isArray(d.exercises))throw 0;
+    if(!confirm(`백업 파일: 세션 ${d.workouts.length}회, 루틴 ${(d.routines||[]).length}개.\n현재 데이터를 이 백업으로 교체할까요?`))return;
+    DB=d; DB.settings=DB.settings||{sound:true,vib:true}; DB.routines=DB.routines||[];
+    save(); ui.view=DB.active?{name:'workout'}:{name:'home'}; render(); alert('불러왔습니다.');
+  }catch(err){alert('올바른 백업 파일이 아닙니다.')}};
+  rd.readAsText(f); e.target.value='';
+});
+
+render();
+if(DB.active)reqWakeLock();
+</script>
