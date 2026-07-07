@@ -231,8 +231,19 @@ const PROGRAMS=[
 ];
 
 let DB=load();
-let ui={view:{name:'home'},exFilter:'',tabFilter:''};
-if(DB.active) ui.view={name:'workout'};
+let ui={view:{name:'home'},exFilter:'',tabFilter:'',pastDraft:null};
+if(DB.active){
+  const hrs=(Date.now()-DB.active.ts)/36e5;
+  if(hrs>=6){
+    if(confirm(`${Math.floor(hrs)}시간 전에 시작된 운동이 남아있습니다. 이어서 기록할까요?\n(취소하면 이 운동은 삭제됩니다)`)){
+      ui.view={name:'workout'};
+    }else{
+      DB.active=null; save();
+    }
+  }else{
+    ui.view={name:'workout'};
+  }
+}
 
 function load(){
   try{
@@ -389,9 +400,9 @@ function newEntry(exId,nSets,targetReps){
 /* ---------- render root ---------- */
 function render(){
   const v=ui.view;
-  const map={home:vHome,workout:vWorkout,hist:vHist,histDetail:vHistDetail,ex:vExTab,exDetail:vExDetail,prog:vProg,progDetail:vProgDetail,set:vSettings};
+  const map={home:vHome,workout:vWorkout,hist:vHist,histDetail:vHistDetail,pastEdit:vPastEdit,ex:vExTab,exDetail:vExDetail,prog:vProg,progDetail:vProgDetail,set:vSettings};
   $('view').innerHTML=(map[v.name]||vHome)();
-  const group={home:'home',workout:'home',hist:'hist',histDetail:'hist',ex:'ex',exDetail:'ex',prog:'prog',progDetail:'prog',set:'set'}[v.name]||'home';
+  const group={home:'home',workout:'home',hist:'hist',histDetail:'hist',pastEdit:'hist',ex:'ex',exDetail:'ex',prog:'prog',progDetail:'prog',set:'set'}[v.name]||'home';
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('on',b.dataset.tab===group));
   renderRest();
   window.scrollTo(0,0);
@@ -665,7 +676,36 @@ function histCard(w){
 function vHist(){
   const list=sorted();
   return `<div class="hd"><h1>기록</h1><span class="sub num">${list.length}회</span></div>
+  <button class="btn" style="margin-bottom:12px" data-act="add-past-open">＋ 과거 기록 추가</button>
   ${list.length?list.map(histCard).join(''):'<div class="empty">아직 기록이 없습니다.</div>'}`;
+}
+function vPastEdit(){
+  const d=ui.pastDraft;
+  return `<div class="hd">
+    <h1 style="font-size:18px">과거 기록 추가</h1>
+    <button class="btn sm ghost muted" data-act="cancel-past">취소</button>
+  </div>
+  <div class="card"><div class="row between"><span class="small">날짜</span>
+    <input type="date" style="width:auto" data-in="pastdate" value="${esc(d.date)}"></div></div>
+  ${d.entries.length?d.entries.map((en,ei)=>{
+    const ex=getEx(en.exId);
+    return `<div class="wex">
+      <div class="row between"><b class="exname">${esc(ex?ex.name:'?')}</b>
+        <button class="btn sm ghost danger" data-act="past-del-ex" data-ei="${ei}">✕</button></div>
+      <div class="sets">
+        <div class="sethead"><span></span><span>무게(kg)</span><span>회수</span><span></span></div>
+        ${en.sets.map((s,si)=>`<div class="setrow">
+          <span class="idx num">${si+1}</span>
+          <input class="num" inputmode="decimal" data-in="pw" data-ei="${ei}" data-si="${si}" value="${esc(s.w)}">
+          <input class="num" inputmode="numeric" data-in="pr" data-ei="${ei}" data-si="${si}" value="${esc(s.r)}">
+          <button class="ck" style="color:var(--bad)" data-act="past-del-set" data-ei="${ei}" data-si="${si}">✕</button>
+        </div>`).join('')}
+      </div>
+      <button class="btn sm" style="margin-top:8px" data-act="past-add-set" data-ei="${ei}">＋ 세트</button>
+    </div>`;
+  }).join(''):`<div class="empty">아래 버튼으로 운동을 추가하세요.</div>`}
+  <button class="btn" data-act="add-ex">＋ 운동 추가</button>
+  <button class="btn primary" style="margin-top:10px" data-act="save-past">저장</button>`;
 }
 function vHistDetail(){
   const w=DB.workouts.find(x=>x.id===ui.view.id);
@@ -857,6 +897,8 @@ document.addEventListener('click',e=>{
   const a=DB.active;
   switch(act){
     case 'tab':{
+      if(ui.view.name==='pastEdit'&&!confirm('작성 중인 과거 기록이 사라집니다. 나갈까요?'))break;
+      if(ui.view.name==='pastEdit')ui.pastDraft=null;
       const t=el.dataset.tab;
       ui.view=(t==='home'&&DB.active)?{name:'workout'}:{name:t};
       render(); break;}
@@ -866,15 +908,17 @@ document.addEventListener('click',e=>{
       if(DB.active&&!confirm('진행 중인 운동이 있습니다. 버리고 새로 시작할까요?'))break;
       startWorkout(DB.routines.find(r=>r.id===id)); break;}
     case 'add-ex': openExPicker(); break;
-    case 'pick-ex':
-      a.entries.push(newEntry(id,3,''));
-      save(); closeSheet(); render(); break;
+    case 'pick-ex':{
+      if(ui.view.name==='pastEdit'){ui.pastDraft.entries.push({exId:id,sets:[{w:'',r:''}]})}
+      else{a.entries.push(newEntry(id,3,''));save()}
+      closeSheet(); render(); break;}
     case 'new-ex-form': newExForm(); break;
     case 'create-ex':{
       const name=$('nx-name').value.trim(); if(!name){alert('이름을 입력하세요');break}
       const ex={id:'c'+Date.now(),name,muscle:$('nx-muscle').value,restSec:+$('nx-rest').value||90,custom:true};
       DB.exercises.push(ex); save(); closeSheet();
       if(ui.view.name==='workout'&&a){a.entries.push(newEntry(ex.id,3,''));save()}
+      else if(ui.view.name==='pastEdit'){ui.pastDraft.entries.push({exId:ex.id,sets:[{w:'',r:''}]})}
       render(); break;}
     case 'set-done': setDone(+el.dataset.ei,+el.dataset.si); break;
     case 'add-set':{
@@ -928,6 +972,32 @@ document.addEventListener('click',e=>{
       const u=URL.createObjectURL(blob); const link=document.createElement('a');
       const d=new Date(); link.download=`fitlog-backup-${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.json`;
       link.href=u; link.click(); setTimeout(()=>URL.revokeObjectURL(u),3000); break;}
+    case 'add-past-open':{
+      const y=new Date(Date.now()-864e5);
+      const iso=`${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+      ui.pastDraft={date:iso,entries:[]}; ui.view={name:'pastEdit'}; render(); break;}
+    case 'past-add-set':{
+      const ss=ui.pastDraft.entries[+el.dataset.ei].sets; const last=ss[ss.length-1];
+      ss.push({w:last?last.w:'',r:last?last.r:''}); render(); break;}
+    case 'past-del-set':{
+      const en=ui.pastDraft.entries[+el.dataset.ei];
+      en.sets.splice(+el.dataset.si,1); if(!en.sets.length)en.sets.push({w:'',r:''});
+      render(); break;}
+    case 'past-del-ex': ui.pastDraft.entries.splice(+el.dataset.ei,1); render(); break;
+    case 'cancel-past':
+      if(confirm('작성 중인 내용이 사라집니다. 취소할까요?')){ui.pastDraft=null; ui.view={name:'hist'}; render();}
+      break;
+    case 'save-past':{
+      const d=ui.pastDraft;
+      const entries=d.entries.map(en=>({exId:en.exId,
+        sets:en.sets.filter(s=>+s.w||+s.r).map(s=>({w:+s.w||0,r:+s.r||0}))})).filter(en=>en.sets.length);
+      if(!entries.length){alert('세트를 1개 이상 입력하세요');break}
+      const dt=new Date(d.date+'T12:00:00');
+      if(isNaN(dt.getTime())){alert('날짜를 확인하세요');break}
+      const w={id:'w'+dt.getTime()+'_'+Math.floor(Math.random()*1000),ts:dt.getTime(),name:'과거 기록',dur:0,entries,manual:true};
+      DB.workouts.push(w); save();
+      ui.pastDraft=null; ui.view={name:'hist'}; render();
+      alert('저장했습니다.'); break;}
     case 'import': $('importfile').click(); break;
     case 'wipe': if(confirm('모든 기록과 루틴이 삭제됩니다. 계속할까요?')&&confirm('정말 초기화할까요? 되돌릴 수 없습니다.')){localStorage.removeItem(KEY);DB=load();ui.view={name:'home'};render()} break;
     case 'close-modal': closeSheet(); break;
@@ -946,6 +1016,11 @@ document.addEventListener('input',e=>{
     const ex=getEx(el.dataset.id); if(ex){ex.restSec=Math.max(0,+el.value||0);save()}
   }else if(k==='weekgoal'){
     DB.settings.weekGoal=+el.value||3; save();
+  }else if(k==='pw'||k==='pr'){
+    const s=ui.pastDraft.entries[+el.dataset.ei].sets[+el.dataset.si];
+    s[k==='pw'?'w':'r']=el.value;
+  }else if(k==='pastdate'){
+    ui.pastDraft.date=el.value;
   }
 });
 $('importfile').addEventListener('change',e=>{
